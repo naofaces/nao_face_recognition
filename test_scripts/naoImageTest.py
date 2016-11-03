@@ -1,5 +1,5 @@
 import sys
-naoqi_root = '/home/USERNAME/naoSoftware/pynaoqi/'
+naoqi_root = '/home/USERNAME/pynaoqi/'
 sys.path.insert(0, naoqi_root)
 
 # -*- encoding: UTF-8 -*-
