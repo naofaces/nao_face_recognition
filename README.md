@@ -2,6 +2,7 @@
 Documentation and code using Nao for a face recognition project
 
 #Setup
+Test
 
 Prerequisites:
 
