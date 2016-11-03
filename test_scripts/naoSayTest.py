@@ -2,7 +2,7 @@
 
 import sys
 import naoIp
-naoqi_root = '/home/USERNAME/naoSoftware/pynaoqi/'
+naoqi_root = '/home/USERNAME/pynaoqi/'
 sys.path.insert(0, naoqi_root)
 import naoqi
 from naoqi import ALProxy
