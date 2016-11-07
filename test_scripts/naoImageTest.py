@@ -1,5 +1,8 @@
+#!/usr/bin/env python
+
 import sys
-naoqi_root = '/home/USERNAME/pynaoqi/'
+import naoConfig
+naoqi_root = naoConfig.naoqi_root
 sys.path.insert(0, naoqi_root)
 
 # -*- encoding: UTF-8 -*-
@@ -53,7 +56,7 @@ def showNaoImage(IP, PORT):
 
 
 if __name__ == '__main__':
-  IP = "169.254.220.71"  # Replace here with your NaoQi's robotIp address.
+  IP = naoConfig.Ip
   PORT = 9559
 
   # Read robotIp address from first argument if any.
