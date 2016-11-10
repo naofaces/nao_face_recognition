@@ -11,4 +11,4 @@
 # 192.168.0.105
 
 Ip = '169.254.66.118'
-naoqi_root = '/home/scayth/naoSoftware/pynaoqi/'
+naoqi_root = '/home/USER/naoSoftware/pynaoqi/'
