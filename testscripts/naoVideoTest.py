@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 
 import sys
+import Image
+import time
+import os
 import naoConfig
 naoqi_root = naoConfig.naoqi_root
 sys.path.insert(0, naoqi_root)
 # -*- encoding: UTF-8 -*-
 # Get an image from NAO. Display it and save it using Python Image Library.
-import Image
-import time
 from naoqi import ALProxy
 
 from PyQt4.QtGui import QWidget, QImage, QApplication, QPainter
+from PyQt4.QtCore import QByteArray, QBuffer
 
 # To get the constants relative to the video.
 import vision_definitions
@@ -45,7 +47,7 @@ class ImageWidget(QWidget):
         self._registerImageClient(IP, PORT)
 
         # Trigget 'timerEvent' every 100 ms.
-        self.startTimer(10)
+        self.startTimer(2)
 
 
     def _registerImageClient(self, IP, PORT):
@@ -87,7 +89,13 @@ class ImageWidget(QWidget):
                              self._alImage[0],           # Width.
                              self._alImage[1],           # Height.
                              QImage.Format_RGB888)
-
+	
+	#data = QByteArray()
+	#buf = QBuffer(data)
+	#self._image.save(buf, 'JPEG')
+	#self._image.save('JPEG')
+	#print data.toBase64()
+	
 
     def timerEvent(self, event):
         """
