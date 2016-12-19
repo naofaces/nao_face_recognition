@@ -20,6 +20,7 @@ import os
 import StringIO
 import urllib
 import base64
+import cPickle as pickle
 
 from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
@@ -75,7 +76,7 @@ class FaceRecognitionWorker(QtCore.QObject):
     current_image = []
     current_result_name = []
 
-    def __init__(self, image_for_gui, name_for_gui, image_count_for_gui, parent=None):
+    def __init__(self, image_for_gui, name_for_gui, image_count_for_gui, people_for_gui, parent=None):
         print 'Initializing face recognition worker'
         super(FaceRecognitionWorker, self).__init__(parent)
         self.connect_to_nao()
@@ -87,7 +88,7 @@ class FaceRecognitionWorker(QtCore.QObject):
         # Openface variables
         self.images = {}
         self.training = False
-        self.people = []
+        self.people = people_for_gui
 
         # Check if new person was added
         self.len_people_old = 0
@@ -161,23 +162,43 @@ class FaceRecognitionWorker(QtCore.QObject):
             time.sleep(0.01)
 
     @pyqtSlot()
-    def training_response(self, training_param, people_param):
+    def training_response(self, training_param):
         # Reacts to toggling the training in GUI
         print 'Training set to ' + str(training_param[0])
         self.training = training_param[0]
-        self.people = people_param
+
+        print '########## Training response: '
+        print str(self.people)
 
         if self.training and self.len_people_old != len(self.people):
             self.len_people_old += 1
             self.image_count_persons.append(0)
-        print 'Persons:'
-        for name in people_param:
-            print name
         if not self.training:
             self.trainSVM()
 
+    @pyqtSlot()
+    def open_model(self, file_name):
+        print 'Thread got ' + file_name
+        open_list = pickle.load(open(file_name, 'rb'))
+        self.svm, self.images, loaded_people, loaded_image_count_persons = open_list
+        del self.people[:]
+        self.people += loaded_people[:]
+        del self.image_count_persons[:]
+        self.image_count_persons += loaded_image_count_persons[:]
+
+        self.len_people_old = len(self.image_count_persons)
+        # return self.people, self.image_count_persons
+
+    @pyqtSlot()
+    def save_model(self, file_name):
+        print 'Thread got ' + file_name
+        save_list = [self.svm, self.images, self.people, self.image_count_persons]
+        pickle.dump(save_list, open(file_name, 'wb'))
+
+
     """
     Openface code, based on https://cmusatyalab.github.io/openface/demo-1-web/
+    You can look, but not touch
     """
     def getData(self):
         X = []
@@ -214,6 +235,9 @@ class FaceRecognitionWorker(QtCore.QObject):
         else:
             (X, y) = d
             numIdentities = len(set(y + [-1]))
+            print '########## numIdentities: ' + str(numIdentities)
+            print self.people
+            print self.image_count_persons
             if numIdentities <= 1:
                 return
 
@@ -225,6 +249,7 @@ class FaceRecognitionWorker(QtCore.QObject):
                  'kernel': ['rbf']}
             ]
             self.svm = GridSearchCV(SVC(C=1), param_grid, cv=5).fit(X, y)
+            print type(self.svm)
 
     def processFrame(self, img, identity):
         is_training = self.training

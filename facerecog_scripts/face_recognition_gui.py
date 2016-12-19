@@ -12,12 +12,16 @@ This script is used to start the application.
 
 import sys
 from PyQt4 import QtGui, QtCore
-from PyQt4.QtGui import QImage, QPainter, QLabel, QPixmap
+from PyQt4.QtGui import QImage, QPainter, QLabel, QPixmap, QFileDialog
 from PyQt4.QtCore import QRect, QThread
 from functools import partial
 import face_recognition_config as config
 import face_recognition_methods
 import greet_persons
+
+# suppress sklearn deprecation warnings
+import warnings
+warnings.filterwarnings("ignore",  category=DeprecationWarning)
 
 naoqi_root = config.naoqi_root
 sys.path.insert(0, config.naoqi_root)
@@ -74,7 +78,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
     def create_thread(self):
         obj_thread = QThread()
         obj = face_recognition_methods.FaceRecognitionWorker(self.current_image, self.current_result_name,
-                                                             self.image_count_persons)
+                                                             self.image_count_persons, self.people)
         obj.moveToThread(obj_thread)
         # TODO: Unsubscribe from videoproxy here?
         # Sample code
@@ -102,6 +106,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
 
         # the current nao image
         self.current_image.append(QImage())
+        self.create_menu()
         self.create_stream_panel(main_grid)
         self.create_control_panel(main_grid)
         self.create_list_panel(main_grid)
@@ -110,6 +115,35 @@ class FaceRecognitionGui(QtGui.QMainWindow):
         central_widget = QtGui.QWidget()
         central_widget.setLayout(main_grid)
         self.setCentralWidget(central_widget)
+
+    def create_menu(self):
+        open_action = QtGui.QAction('&Open', self)
+        open_action.setShortcut('Ctrl+O')
+        open_action.triggered.connect(self.open_file)
+
+        save_action = QtGui.QAction('&Save', self)
+        save_action.setShortcut('Ctrl+S')
+        save_action.triggered.connect(self.save_file)
+
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu('&File')
+        file_menu.addAction(open_action)
+        file_menu.addAction(save_action)
+
+    def save_file(self):
+        file_name = QFileDialog.getSaveFileName(None, 'Save file', '/home', 'All files (*.*)',
+                                                options=QFileDialog.DontUseNativeDialog)
+        if file_name:
+            print 'Saving ' + str(file_name)
+            self.worker.save_model(file_name)
+
+    def open_file(self):
+        file_name = QFileDialog.getOpenFileName(None, 'Open file', '/home', 'All files (*.*)',
+                                                options=QFileDialog.DontUseNativeDialog)
+        if file_name:
+            print 'Opening ' + str(file_name)
+            # self.people, self.image_count_persons = self.worker.open_model(file_name)
+            self.worker.open_model(file_name)
 
     def create_stream_panel(self, main_grid):
         stream_grid = QtGui.QGridLayout()
@@ -129,8 +163,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
         greet_button = QtGui.QPushButton("Turn greetings on")
         # Send a signal to worker thread that training was switched on/off and transfer people list
         QtCore.QObject.connect(training_button, QtCore.SIGNAL("clicked()"), partial(self.worker.training_response,
-                                                                                    training_param=self.training,
-                                                                                    people_param=self.people))
+                                                                                    training_param=self.training))
 
         button_list = list()
         button_list.append(add_button)
@@ -226,6 +259,9 @@ class FaceRecognitionGui(QtGui.QMainWindow):
 
     def handler_training(self, button):
         # Toggles the variable which is hold by the gui, and the button label
+        print '########## Training handler: '
+        print str(self.people)
+
         if not self.training[0]:
             self.training[0] = True
             button.setText('Turn training off')
