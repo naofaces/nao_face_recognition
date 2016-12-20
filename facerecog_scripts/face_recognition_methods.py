@@ -8,36 +8,20 @@ import sys
 import Image
 import ImageDraw
 import time
+import cPickle as pickle
 import face_recognition_config as config
+
 
 # Openface imports
 import argparse
 import cv2
 import imagehash
-import json
 import numpy as np
 import os
-import StringIO
-import urllib
-import base64
-import cPickle as pickle
-
-from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
-from sklearn.manifold import TSNE
 from sklearn.svm import SVC
-
 import matplotlib as mpl
 mpl.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-
-naoqi_root = config.naoqi_root
-openface_root = config.openface_root
-sys.path.insert(0, config.naoqi_root)
-sys.path.insert(0, config.openface_root)
-# naoqi will be found at runtime if installed in config.naoqi_root
-from naoqi import ALProxy
 
 modelDir = os.path.join(config.openface_root, 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
@@ -61,6 +45,13 @@ align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
 
+naoqi_root = config.naoqi_root
+openface_root = config.openface_root
+sys.path.insert(0, config.naoqi_root)
+sys.path.insert(0, config.openface_root)
+# naoqi will be found at runtime if installed in config.naoqi_root
+from naoqi import ALProxy
+
 
 class FaceRecognitionWorker(QtCore.QObject):
     """
@@ -74,6 +65,7 @@ class FaceRecognitionWorker(QtCore.QObject):
     videoProxy = None
     # current nao image
     current_image = []
+    # currently recognized person
     current_result_name = []
 
     def __init__(self, image_for_gui, name_for_gui, image_count_for_gui, people_for_gui, parent=None):
@@ -84,129 +76,106 @@ class FaceRecognitionWorker(QtCore.QObject):
         self.current_result_name = name_for_gui
         # number of training images per person
         self.image_count_persons = image_count_for_gui
+        # Used for checking if new person was added
+        self.len_people_old = 0
 
         # Openface variables
         self.images = {}
         self.training = False
         self.people = people_for_gui
-
-        # Check if new person was added
-        self.len_people_old = 0
-
         self.svm = None
-        # if args.unknown:
-        #     self.unknownImgs = np.load("./examples/web/unknown.npy")
 
     def connect_to_nao(self):
+        # Connects to the video proxy
         try:
-            # tts = ALProxy('ALTextToSpeech', self.robotIp, self.port)
             self.videoProxy = ALProxy("ALVideoDevice", self.robotIp, self.port)
             resolution = 2  # VGA
             color_space = 11  # RGB
             frame_rate = 30
             self.imgClient = self.videoProxy.subscribe("imgclient", resolution, color_space, frame_rate)
         except Exception, e:
-            'Could not create proxy: ' + str(e)
+            'ERROR: Could not create proxy: ' + str(e)
+        if not self.videoProxy:
+            print 'ERROR: videoProxy could not be reached, please reboot nao'
 
     @pyqtSlot()
     def image_processing(self):
-        print 'Starting image processing'
+        print 'INFO: Starting image processing'
         while True:
             # Retrieve a new image from Nao.
             nao_image = self.videoProxy.getImageRemote(self.imgClient)
-            # TODO: proper error handling
             if nao_image is not None:
                 # getImageRemote returns images as lists of data
                 width = nao_image[0]
                 height = nao_image[1]
                 image_data = nao_image[6]
-                # Create a PIL Image from our pixel array.
+                # Create a PIL Image from pixel array
                 rgb_image = Image.frombytes("RGB", (width, height), image_data)
             else:
+                # If video proxy does not work, an error image is displayed
                 rgb_image = Image.open('failure.jpeg')
                 draw = ImageDraw.Draw(rgb_image)
-                draw.text((5, 10), 'ERROR: Could not get image from nao, pls reboot nao. Okithxbye')
+                draw.text((5, 10), 'ERROR: Could not get image from nao, please reboot nao. Okithxbye')
                 width, height = rgb_image.size
-                print 'ERROR: Could not get image from nao, pls reboot nao. Okithxbye'
-
-            # print type(rgb_image)
-            # if self.training:
-            #     f = Face(np.array(rgb_image), self.people[-1])
-            #     self.images.append(f)
+                print 'ERROR: Could not get image from nao, please reboot nao. Okithxbye'
 
             # Process the frame using Openface. Each frame is either used for training, or for recognition
-            rgb_image, returned_name = self.processFrame(rgb_image, len(self.people)-1)
+            rgb_image, returned_name = self.processFrame(rgb_image, len(self.people) - 1)
             if self.training:
                 # Calculate the number of images per person
                 current_image_count = len(self.images)  # Get total number of training images
                 # Sum of training images per person in total, except for current one
                 image_sum = sum(self.image_count_persons[:-1])
-                # Number of training images for current person
+                # Calculate number of training images for current person
                 current_image_count = current_image_count - image_sum
                 self.image_count_persons[-1] = current_image_count
-
-            # draw = ImageDraw.Draw(rgb_image)
-            # # font = ImageFont.load('arial.pil')
-            # # draw.line((0, 0) + rgb_image.size, fill = (128, 128, 0, 0))
-            # # draw.rectangle((0, 0, 100, 100), fill = (0, 170, 0, 0))
-            # if self.training:
-            #     draw.text((5, 10), 'Training ON')
-            # else:
-            #     draw.text((5, 10), 'Training OFF')
-            # del draw
 
             # Transforming the image to QImage for gui
             self.current_image[0] = QImage(rgb_image.tobytes(), width, height, QImage.Format_RGB888)
             self.current_result_name[0] = returned_name
-
             time.sleep(0.01)
 
     @pyqtSlot()
     def training_response(self, training_param):
         # Reacts to toggling the training in GUI
-        print 'Training set to ' + str(training_param[0])
         self.training = training_param[0]
-
-        print '########## Training response: '
-        print str(self.people)
-
+        # Extend list holding the no. of images per person
         if self.training and self.len_people_old != len(self.people):
             self.len_people_old += 1
             self.image_count_persons.append(0)
+        # When training images are take/training is toggled to off, train the SVM
         if not self.training:
             self.trainSVM()
 
-    @pyqtSlot()
     def open_model(self, file_name):
-        print 'Thread got ' + file_name
+        # Loads data for trained model, representation, trained persons and no. of images per person
         open_list = pickle.load(open(file_name, 'rb'))
         self.svm, self.images, loaded_people, loaded_image_count_persons = open_list
+        # Lists must be modified in place, not set to new references, as they are shared with the gui!
         del self.people[:]
         self.people += loaded_people[:]
         del self.image_count_persons[:]
         self.image_count_persons += loaded_image_count_persons[:]
-
         self.len_people_old = len(self.image_count_persons)
-        # return self.people, self.image_count_persons
 
-    @pyqtSlot()
     def save_model(self, file_name):
-        print 'Thread got ' + file_name
+        # Saves data for trained model, representation, trained persons and no. of images per person to pickle file
+        # It is recommend to use ".p" as file extension
         save_list = [self.svm, self.images, self.people, self.image_count_persons]
         pickle.dump(save_list, open(file_name, 'wb'))
 
-
     """
     Openface code, based on https://cmusatyalab.github.io/openface/demo-1-web/
-    You can look, but not touch
+    Only modify if you know exactly, what you are doing
     """
+
     def getData(self):
         X = []
         y = []
         for img in self.images.values():
             X.append(img.rep)
             y.append(img.identity)
-        # identity -1 = unknown????? D:
+        # identity -1 = unknown
         numIdentities = len(set(y + [-1])) - 1
         if numIdentities == 0:
             return None
@@ -218,13 +187,12 @@ class FaceRecognitionWorker(QtCore.QObject):
             if numUnknownAdd > 0:
                 print("+ Augmenting with {} unknown images.".format(numUnknownAdd))
                 for rep in self.unknownImgs[:numUnknownAdd]:
-                    # print(rep)
                     X.append(rep)
                     y.append(-1)
 
         X = np.vstack(X)
         y = np.array(y)
-        return (X, y)
+        return X, y
 
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
@@ -235,9 +203,6 @@ class FaceRecognitionWorker(QtCore.QObject):
         else:
             (X, y) = d
             numIdentities = len(set(y + [-1]))
-            print '########## numIdentities: ' + str(numIdentities)
-            print self.people
-            print self.image_count_persons
             if numIdentities <= 1:
                 return
 
@@ -249,15 +214,12 @@ class FaceRecognitionWorker(QtCore.QObject):
                  'kernel': ['rbf']}
             ]
             self.svm = GridSearchCV(SVC(C=1), param_grid, cv=5).fit(X, y)
-            print type(self.svm)
 
     def processFrame(self, img, identity):
         is_training = self.training
         result_name = None
-        #img = img.resize((300, 400), Image.ANTIALIAS)
         buf = np.fliplr(np.asarray(img))
         width, height = img.size
-        #rgbFrame = np.zeros((height, width, 3), dtype=np.uint8)
         rgbFrame = np.zeros((height, width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
         rgbFrame[:, :, 1] = buf[:, :, 1]
@@ -283,8 +245,6 @@ class FaceRecognitionWorker(QtCore.QObject):
                 rep = net.forward(alignedFace)
                 if is_training:
                     self.images[phash] = Face(rep, identity)
-                    # TODO msg schicken?
-                    # content = [str(x) for x in alignedFace.flatten()]
                 else:
                     if len(self.people) == 0:
                         identity = -1

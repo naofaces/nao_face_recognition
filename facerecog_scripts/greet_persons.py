@@ -51,11 +51,10 @@ class Greeter:
 
     def greet(self, name, count):
         # Generates the greetings
-        print name + ' ' + str(count)
         sentence = 'Hello'
         if count == 0:
             sentence = str(random.choice(greetings.initial_greetings)) % name
         if count >= 1:
             sentence = str(random.choice(greetings.repeated_greetings)) % name
-        print 'Sentence is: ' + sentence
+        print 'INFO: Sentence is: ' + sentence
         self.speech_proxy.say(sentence)

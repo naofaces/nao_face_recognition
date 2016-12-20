@@ -29,4 +29,3 @@ repeated_greetings = ["Nice to see you again %s",
                       "If I was an operating system, your process would have top priority %s",
                       "%s you must be Google Glasses, because you augment my reality."
                       ]
-
