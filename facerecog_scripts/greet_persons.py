@@ -23,8 +23,13 @@ class Greeter:
     port = 9559
     greeting_dict = None
     speech_proxy = None
+    # time in seconds before a new person is greeted
     initial_time_gap = 1
+    # time in seconds before a person is greeted repeatedly
     repeated_time_gap = 5
+    # time in seconds between each greeting, to prevent non-stop-greetings
+    global_time_gap = 5
+    time_of_last_greeting = time.time()
 
     def __init__(self):
         # greeting dict holds name as key, time stamp of last greeting, and counter for greetings in total
@@ -41,12 +46,15 @@ class Greeter:
         if name not in [None, 'Unknown']:
             if name not in self.greeting_dict.keys():
                 self.greeting_dict[name] = [time.time(), 0]
+            # local_time_gap is used only for temporary storage
             local_time_gap = self.repeated_time_gap
             if self.greeting_dict[name][1] == 0:
                 local_time_gap = self.initial_time_gap
-            if self.greeting_dict[name][0] < (time.time() - local_time_gap):
+            if self.greeting_dict[name][0] < (time.time() - local_time_gap) \
+                    and self.time_of_last_greeting < (time.time() - self.global_time_gap):
                 self.greet(str(name), self.greeting_dict[name][1])
                 self.greeting_dict[name][0] = time.time()
+                self.time_of_last_greeting = time.time()
                 self.greeting_dict[name][1] += 1
 
     def greet(self, name, count):

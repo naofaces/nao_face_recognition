@@ -11,6 +11,7 @@ This script is used to start the application.
 """
 
 import sys
+import os
 from PyQt4 import QtGui, QtCore
 from PyQt4.QtGui import QImage, QLabel, QPixmap, QFileDialog
 from PyQt4.QtCore import QThread
@@ -132,7 +133,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
 
     def save_file(self):
         # It is recommended to save pickle files with a *.p extension
-        file_name = QFileDialog.getSaveFileName(None, 'Save file', '/home', 'Pickle files (*.p)',
+        file_name = QFileDialog.getSaveFileName(None, 'Save file', os.getcwd(), 'Pickle files (*.p)',
                                                 options=QFileDialog.DontUseNativeDialog)
 
         if file_name:
@@ -140,7 +141,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
             self.worker.save_model(file_name)
 
     def open_file(self):
-        file_name = QFileDialog.getOpenFileName(None, 'Open file', '/home', 'Pickle files (*.p)',
+        file_name = QFileDialog.getOpenFileName(None, 'Open file', os.getcwd(), 'Pickle files (*.p)',
                                                 options=QFileDialog.DontUseNativeDialog)
         if file_name:
             print 'INFO: Opening ' + str(file_name)
@@ -207,6 +208,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
 
     def update_text_area(self):
         # updates information about trained people and no. of images
+        current_text = self.text_area.toPlainText()
         text = ''
         for name in self.people:
             index = self.people.index(name)
@@ -215,8 +217,9 @@ class FaceRecognitionGui(QtGui.QMainWindow):
             else:
                 count = self.image_count_persons[index]
             text += name + ' (Images: ' + str(count) + ')\n'
-        self.text_area.setText(text)
-        self.text_area.verticalScrollBar().setValue(self.text_area.verticalScrollBar().maximum())
+        if current_text != text:
+            self.text_area.setText(text)
+            self.text_area.verticalScrollBar().setValue(self.text_area.verticalScrollBar().maximum())
 
     def timerEvent(self, event):
         # Periodically check for greetings
@@ -231,6 +234,7 @@ class FaceRecognitionGui(QtGui.QMainWindow):
             # setPixmap draws the image on screen
             self.pix_holder[0].setPixmap(QPixmap.fromImage(self.current_image[0]))
         self.update_text_area()
+
 
     '''
     Event handler for gui
